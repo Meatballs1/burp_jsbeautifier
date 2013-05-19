@@ -133,7 +133,7 @@ class JavaScriptTab(IMessageEditorTab):
                     javascript = js              
             
             self._txtInput.setText(javascript)
-            self._txtInput(self._editable)
+            self._txtInput.setEditable(self._editable)
 
         # remember the displayed content
         self._currentMessage = content
