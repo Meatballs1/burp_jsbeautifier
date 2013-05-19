@@ -1,5 +1,5 @@
 ##
-# js-beautifier burpsuite extension
+# js-beautifier BurpSuite Extension
 # Ben Campbell <eat_meatballs[at]hotmail.co.uk>
 # http://rewtdance.blogspot.co.uk
 # http://github.com/Meatballs1/burp_jsbeautifier
@@ -15,18 +15,56 @@ from burp import IBurpExtender
 from burp import IMessageEditorTabFactory
 from burp import IMessageEditorTab
 from burp import IParameter
+from burp import IHttpListener
+from burp import IBurpExtenderCallbacks
+from burp import ITab
+from javax import swing
 try:
     import jsbeautifier
 except ImportError:
     print "ERROR: jsbeautifier missing from burpsuite lib/ folder."
 
-class BurpExtender(IBurpExtender, IMessageEditorTabFactory):
+
+def getHeadersContaining(findValue, headers):
+    if (findValue != None and headers != None and len(headers)>0):
+        return [s for s in headers if findValue in s]
+    return None
+
+def parseContent(helper, content):
+    javascript = ""
+
+    if content == None:
+        return javascript
+    
+    info = helper.analyzeResponse(content)
+
+    js = helper.bytesToString(content[info.getBodyOffset():])
+
+    if (js != None and len(js) > 0):
+        try:
+            bjs = jsbeautifier.beautify(js)
+            if (bjs != None and len(bjs) > 0):
+                javascript = bjs
+            else:
+                print "ERROR: jsbeautifier returned an empty string or None."
+                javascript = js
+        except:
+            print "ERROR: jsbeautifier threw an exception: %s" % sys.exc_info()[0]
+            javascript = js
+
+    return javascript
+
+class BurpExtender(IBurpExtender, IMessageEditorTabFactory, IHttpListener, ITab):
     
     #
     # implement IBurpExtender
     #
-    
     def	registerExtenderCallbacks(self, callbacks):
+        print "js-beautifier BurpSuite Extension"
+        print "Ben Campbell <eat_meatballs[at]hotmail.co.uk>"
+        print "http://rewtdance.blogspot.co.uk"
+        print "http://github.com/Meatballs1/burp_jsbeautifier"
+        
     
         # keep a reference to our callbacks object
         self._callbacks = callbacks
@@ -36,25 +74,74 @@ class BurpExtender(IBurpExtender, IMessageEditorTabFactory):
         
         # set our extension name
         callbacks.setExtensionName("Javascript Beautifier")
-        
+
+        # Don't Auto modify requests by default
+        self._replaceAll = False
+
+        # Create Tab
+        self._jPanel = swing.JPanel()
+        self._toggleButton = swing.JToggleButton('Enable Automatic JavaScript Beautifying', actionPerformed=self.toggleOnOff)
+        self._jPanel.add(self._toggleButton)
+        callbacks.customizeUiComponent(self._jPanel)
+
         # register ourselves as a message editor tab factory
         callbacks.registerMessageEditorTabFactory(self)
-        
+        callbacks.registerHttpListener(self)
+        callbacks.addSuiteTab(self)
         return
         
     # 
     # implement IMessageEditorTabFactory
     #
-    
     def createNewInstance(self, controller, editable):
-        
         # create a new instance of our custom editor tab
         return JavaScriptTab(self, controller, editable)
+
+    #
+    # implement IHttpListener
+    #
+    def processHttpMessage(self, toolFlag, messageIsRequest, messageInfo):
+        if messageIsRequest:
+                return
+
+        if (self._replaceAll and toolFlag == IBurpExtenderCallbacks.TOOL_PROXY):
+            response_info = self._helpers.analyzeResponse(messageInfo.getResponse())
+            headers = response_info.getHeaders()
+	    if (headers != None and len(headers) > 0):
+		content_type_headers = getHeadersContaining('Content-Type', headers)
+                if (content_type_headers != None):
+                    for content_type_header in content_type_headers:
+                        if ('javascript' in content_type_header):
+                            javascript = parseContent(self._helpers, messageInfo.getResponse())
+                            messageInfo.setResponse(self._helpers.buildHttpMessage(headers, javascript))
+            
+        return
+
+    #
+    # implement ITab
+    #
+    def getTabCaption(self):
+        return "JSBeautifier"
+
+    #
+    # implement ITab
+    #
+    def getUiComponent(self):
+        return self._jPanel
+
+    def toggleOnOff(self, button):
+        self._replaceAll = not self._replaceAll
+        if self._replaceAll:
+            start = 'Disable'
+        else:
+            start = 'Enable'
+        self._toggleButton.setText('%s Automatic JavaScript Beautifying' % start)
+        self._toogleButton.setPressed(self._replaceAll)
+
         
 # 
 # class implementing IMessageEditorTab
 #
-
 class JavaScriptTab(IMessageEditorTab):
 
     def __init__(self, extender, controller, editable):
@@ -76,7 +163,6 @@ class JavaScriptTab(IMessageEditorTab):
     #
     # implement IMessageEditorTab
     #
-
     def getTabCaption(self):
         return "JavaScript"
         
@@ -95,7 +181,7 @@ class JavaScriptTab(IMessageEditorTab):
 	    # Store HTTP Headers incase we edit the response.
 	    self._httpHeaders = headers
 	    if (headers != None and len(headers) > 0):
-		content_type_headers = self.getHeadersContaining('Content-Type', headers)
+		content_type_headers = getHeadersContaining('Content-Type', headers)
                 if (content_type_headers != None):
                     for content_type_header in content_type_headers:
                         if ('javascript' in content_type_header):
@@ -103,10 +189,7 @@ class JavaScriptTab(IMessageEditorTab):
 							
         return False
     
-    def getHeadersContaining(self, findValue, headers):
-        if (findValue != None and headers != None and len(headers)>0):
-            return [s for s in headers if findValue in s]
-        return None
+
         
     def setMessage(self, content, isRequest):
         if (content is None):
@@ -115,22 +198,7 @@ class JavaScriptTab(IMessageEditorTab):
             self._txtInput.setEditable(False)
         
         else:
-            # retrieve the js body
-            info = self._extender._helpers.analyzeResponse(content)
-            javascript = ""
-            js = self._extender._helpers.bytesToString(content[info.getBodyOffset():])
-
-            if (js != None and len(js) > 0):
-                try:
-                    bjs = jsbeautifier.beautify(js)
-                    if (bjs != None and len(bjs) > 0):
-                        javascript = bjs
-                    else:
-                        print "ERROR: jsbeautifier returned an empty string or None."
-                        javascript = js
-                except:
-                    print "ERROR: jsbeautifier threw an exception: %s" % sys.exc_info()[0]
-                    javascript = js              
+            javascript = parseContent(self._extender._helpers, content)           
             
             self._txtInput.setText(javascript)
             self._txtInput.setEditable(self._editable)
