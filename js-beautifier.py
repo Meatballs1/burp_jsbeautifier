@@ -18,7 +18,7 @@ from burp import IParameter
 try:
     import jsbeautifier
 except ImportError:
-    print "jsbeautifier missing from burpsuite lib/ folder."
+    print "ERROR: jsbeautifier missing from burpsuite lib/ folder."
 
 class BurpExtender(IBurpExtender, IMessageEditorTabFactory):
     
