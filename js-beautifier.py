@@ -30,7 +30,7 @@ def getHeadersContaining(findValue, headers):
         return [s for s in headers if findValue in s]
     return None
 
-def parseContent(helper, content, headers=False):
+def parseContent(helper, content):
     javascript = ""
 
     if content == None:
@@ -38,7 +38,6 @@ def parseContent(helper, content, headers=False):
     
     info = helper.analyzeResponse(content)
 
-    headers = helper.bytesToString(content[:info.getBodyOffset()])
     js = helper.bytesToString(content[info.getBodyOffset():])
 
     if (js != None and len(js) > 0):
@@ -53,12 +52,7 @@ def parseContent(helper, content, headers=False):
             print "ERROR: jsbeautifier threw an exception: %s" % sys.exc_info()[0]
             javascript = js
 
-    if headers:
-        result = headers + javascript
-    else:
-        result = javascript
-        
-    return result
+    return javascript
 
 class BurpExtender(IBurpExtender, IMessageEditorTabFactory, IHttpListener, ITab):
     
@@ -84,15 +78,10 @@ class BurpExtender(IBurpExtender, IMessageEditorTabFactory, IHttpListener, ITab)
         # Don't Auto modify requests by default
         self._replaceAll = False
 
-        # Dont display headers on the JavaScript Tab
-        self._leaveHeaders = False
-
         # Create Tab
         self._jPanel = swing.JPanel()
         self._toggleButton = swing.JToggleButton('Enable Automatic JavaScript Beautifying', actionPerformed=self.toggleOnOff)
-        self._toggleHeadersButton = swing.JToggleButton('Enable Show Headers in Tab', actionPerformed=self.toggleHeaders)
         self._jPanel.add(self._toggleButton)
-        self._jPanel.add(self._toggleHeadersButton)
         callbacks.customizeUiComponent(self._jPanel)
 
         # register ourselves as a message editor tab factory
@@ -123,7 +112,7 @@ class BurpExtender(IBurpExtender, IMessageEditorTabFactory, IHttpListener, ITab)
                 if (content_type_headers != None):
                     for content_type_header in content_type_headers:
                         if ('javascript' in content_type_header):
-                            javascript = parseContent(self._helpers, messageInfo.getResponse(), self._leaveHeaders)
+                            javascript = parseContent(self._helpers, messageInfo.getResponse())
                             messageInfo.setResponse(self._helpers.buildHttpMessage(headers, javascript))
             
         return
@@ -147,17 +136,6 @@ class BurpExtender(IBurpExtender, IMessageEditorTabFactory, IHttpListener, ITab)
         else:
             start = 'Enable'
         self._toggleButton.setText('%s Automatic JavaScript Beautifying' % start)
-        self._toggleButton.setPressed(self._replaceAll)
-
-    def toggleHeaders(self, button):
-        self._leaveHeaders = not self._leaveHeaders
-        if self._leaveHeaders:
-            start = 'Disable'
-        else:
-            start = 'Enable'
-        self._toggleHeadersButton.setText('%s Show Headers in Tab' % start)
-        self._toggleHeadersButton.setPressed(self._leaveHeaders)
-
         
 # 
 # class implementing IMessageEditorTab
@@ -218,7 +196,7 @@ class JavaScriptTab(IMessageEditorTab):
             self._txtInput.setEditable(False)
         
         else:
-            javascript = parseContent(self._extender._helpers, content, self._leaveHeaders)           
+            javascript = parseContent(self._extender._helpers, content)           
             
             self._txtInput.setText(javascript)
             self._txtInput.setEditable(self._editable)
