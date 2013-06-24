@@ -136,7 +136,7 @@ class BurpExtender(IBurpExtender, IMessageEditorTabFactory, IHttpListener, ITab)
         else:
             start = 'Enable'
         self._toggleButton.setText('%s Automatic JavaScript Beautifying' % start)
-        self._toogleButton.setPressed(self._replaceAll)
+        self._toggleButton.setPressed(self._replaceAll)
 
         
 # 
